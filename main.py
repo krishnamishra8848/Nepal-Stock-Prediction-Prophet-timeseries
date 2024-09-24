@@ -32,6 +32,7 @@ if uploaded_file is not None:
 
         # Ask for inputs: Buying price and purchase date
         buying_price = st.number_input("Enter the price at which you bought the share:", min_value=0.0)
+        no_of_kitta = st.number_input("Enter the number of shares (kitta):", min_value=1)
 
         # Restrict buying date input to past dates
         today = datetime.today().date()
@@ -79,60 +80,31 @@ if uploaded_file is not None:
         else:
             st.warning("Our model can't understand this stock well. We don't recommend relying on this prediction.")
 
-        # Calculate the average positive and negative deviation
-        positive_deviation = last_7_days_comparison[last_7_days_comparison['Difference'] > 0]['Difference'].mean()
-        negative_deviation = last_7_days_comparison[last_7_days_comparison['Difference'] < 0]['Difference'].mean()
+        # Ask the user to input the date they want to sell their shares
+        selling_date = st.date_input("Enter the date you want to sell your share (must be within next 365 days):", min_value=today)
 
-        # Display 'Recommend' button only if both inputs are provided
-        if st.button("Recommend"):
-            # Step 4: Train Prophet model
-            model = Prophet()
-            model.fit(df_prophet)
+        # Step 7: Filter the forecast for the selling date
+        forecast_selling_date = forecast[forecast['ds'] == selling_date]
 
-            # Step 5: Forecast future prices for 365 days
-            future = model.make_future_dataframe(periods=365)
-            forecast = model.predict(future)
+        if not forecast_selling_date.empty:
+            predicted_price = forecast_selling_date['yhat'].values[0]
 
-            # Add both positive and negative deviations to forecasted prices
-            forecast['Positive Deviation'] = forecast['yhat'] + positive_deviation
-            forecast['Negative Deviation'] = forecast['yhat'] - abs(negative_deviation)
+            # Calculate profit or loss
+            total_buying_price = buying_price * no_of_kitta
+            total_selling_price = predicted_price * no_of_kitta
+            profit_or_loss = total_selling_price - total_buying_price
 
-            # Convert 'ds' column in forecast to date only (without time)
-            forecast['ds'] = forecast['ds'].dt.date
+            # Display the predicted price and profit/loss
+            st.write(f"### Prediction for {selling_date}")
+            st.write(f"Predicted price per share: **{predicted_price:.2f}**")
 
-            # Step 6: Filter forecast for dates greater than both the purchase date and today
-            future_filtered = forecast[(forecast['ds'] > pd.to_datetime(purchase_date).date()) & (forecast['ds'] > pd.to_datetime(today).date())]
-
-            # Step 7: Create a list of price thresholds
-            price_thresholds = [buying_price + i for i in range(10, 201, 10)]  # +10, +20, +30,..., +200
-
-            # Step 8: Recommend dates for each threshold
-            recommended_dates = []
-            for threshold in price_thresholds:
-                # Find the first date where either positive or negative adjusted price exceeds the threshold
-                threshold_dates = future_filtered[(future_filtered['Positive Deviation'] > threshold) | (future_filtered['Negative Deviation'] > threshold)]
-                if not threshold_dates.empty:
-                    first_date = threshold_dates.iloc[0]  # Get the first date where the price exceeds the threshold
-                    recommended_dates.append((first_date['ds'], first_date['yhat']))
-
-            # Step 9: Display recommendation or no-profit message
-            if recommended_dates:
-                st.write("### Recommended Dates to Sell:")
-
-                # Convert recommended dates to DataFrame for better display
-                df_recommend = pd.DataFrame(recommended_dates, columns=['Date', 'Predicted Price'])
-
-                # Format date and style the table for better UI
-                df_recommend['Date'] = df_recommend['Date'].astype(str)  # Convert date to string format
-                st.dataframe(df_recommend.style.format({"Predicted Price": "{:.2f}"}).set_properties(**{
-                    'background-color': '#f0f0f0',  # Light gray background
-                    'font-size': '14px',
-                    'color': '#333',  # Dark text
-                    'border-color': '#ccc',  # Light border
-                    'text-align': 'center'
-                }))
+            if profit_or_loss > 0:
+                st.success(f"Profit: **{profit_or_loss:.2f}**")
             else:
-                st.warning("No future dates found where the price exceeds your target prices.")
+                st.error(f"Loss: **{abs(profit_or_loss):.2f}**")
+        else:
+            st.warning("No prediction available for the selected selling date. Please choose a different date.")
 
 # Disclaimer (in red color)
 st.markdown("<p style='color:red;'>Disclaimer: The stock predictions provided by this tool are based on historical data and statistical modeling. Actual market prices may vary significantly. Use this tool for informational purposes only and consult with a financial expert before making any investment decisions.</p>", unsafe_allow_html=True)
+
