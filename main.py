@@ -96,15 +96,31 @@ if uploaded_file is not None:
 
             # Display the predicted price and profit/loss
             st.write(f"### Prediction for {selling_date}")
-            st.write(f"Predicted price per share: **{predicted_price:.2f}**")
 
-            if profit_or_loss > 0:
+            # Display the predicted price in h1 style with color based on comparison
+            if predicted_price > buying_price:
+                st.markdown(f"<h1 style='color:green;'>Predicted price per share: {predicted_price:.2f}</h1>", unsafe_allow_html=True)
                 st.success(f"Profit: **{profit_or_loss:.2f}**")
             else:
-                st.error(f"Loss: **{abs(profit_or_loss):.2f}**")
+                st.markdown(f"<h1 style='color:red;'>Predicted price per share: {predicted_price:.2f}</h1>", unsafe_allow_html=True)
+
+            # Step 8: Input the user's selling price demand
+            selling_price_demand = st.number_input("Enter your desired selling price per share:", min_value=0.0)
+
+            if selling_price_demand > 0:
+                # Filter the forecast to find the dates when the demand price is met or exceeded within the next year
+                demand_meeting_dates = forecast[(forecast['ds'] > today) & (forecast['ds'] <= today.replace(year=today.year + 1))]
+                demand_meeting_dates = demand_meeting_dates[demand_meeting_dates['yhat'] >= selling_price_demand]
+
+                if not demand_meeting_dates.empty:
+                    # Display the dates when the selling price demand is met or exceeded
+                    st.write("### Dates where your demand price is met or exceeded")
+                    demand_meeting_dates_display = demand_meeting_dates[['ds', 'yhat']].rename(columns={'ds': 'Date', 'yhat': 'Predicted Price'})
+                    st.table(demand_meeting_dates_display.style.format({"Predicted Price": "{:.2f}"}))
+                else:
+                    st.warning("Within 1 year, your demand price is not met. Please consider adjusting your demand price.")
         else:
             st.warning("No prediction available for the selected selling date. Please choose a different date.")
 
 # Disclaimer (in red color)
 st.markdown("<p style='color:red;'>Disclaimer: The stock predictions provided by this tool are based on historical data and statistical modeling. Actual market prices may vary significantly. Use this tool for informational purposes only and consult with a financial expert before making any investment decisions.</p>", unsafe_allow_html=True)
-
